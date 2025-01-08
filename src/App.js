@@ -1,125 +1,205 @@
-import React, { useState } from 'react';
-import './App.css';
-import logo from './logo.png';
+import React, { useState } from "react";
+import {
+  AppBar,
+  Toolbar,
+  Typography,
+  Box,
+  Button,
+  Grid,
+  Card,
+  CardContent,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+} from "@mui/material";
+import UploadFileIcon from "@mui/icons-material/UploadFile";
+import Chat from "./Chat"; // Certifique-se de que esse componente está correto
 
-const App = () => {
-  const [messages, setMessages] = useState([]);
-  const [userMessage, setUserMessage] = useState('');
-  const [file, setFile] = useState(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
+const API_BASE_URL = "https://run-dev-hol-app-cbc-470141199353.southamerica-east1.run.app";
 
-  const handleSendMessage = () => {
-    if (userMessage.trim()) {
-      const newMessages = [...messages, { sender: 'user', text: userMessage }];
-      setMessages(newMessages);
-      setUserMessage('');
+function App() {
+  const [activePage, setActivePage] = useState("home");
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [notebooks, setNotebooks] = useState([]);
+  const [activeNotebook, setActiveNotebook] = useState(null);
+  const [editingTitle, setEditingTitle] = useState(false);
 
-      // Simulating bot response
-      setTimeout(() => {
-        setMessages([...newMessages, { sender: 'bot', text: 'Esta é uma resposta automática. Obrigado por sua mensagem!' }]);
-      }, 1000);
-    }
-  };
+  const handleFileUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
 
-  const handleFileChange = (e) => {
-    const selectedFile = e.target.files[0];
-    if (selectedFile) {
-      // Verifica se o arquivo é um PDF
-      if (!selectedFile.name.endsWith('.pdf')) {
-        alert('Por favor, selecione um arquivo PDF!');
-        return;
-      }
-      // Verifica se o arquivo ultrapassa o limite de 6 GB
-      if (selectedFile.size > 6 * 1024 * 1024 * 1024) {
-        alert('O arquivo é muito grande! O limite é 6 GB.');
-        return;
-      }
-      setFile(selectedFile);
-    }
-  };
-
-  const handleFileUpload = () => {
-    if (!file) {
-      alert('Nenhum arquivo selecionado!');
+    if (file.size > 100 * 1024 * 1024) {
+      alert("O arquivo é muito grande! (máx: 100MB)");
       return;
     }
 
-    // Simula o processo de upload
-    const totalChunks = Math.ceil(file.size / (1024 * 1024 * 10)); // 10 MB por pedaço
-    let uploadedChunks = 0;
+    const formData = new FormData();
+    formData.append("session_token", ""); // Pode ser vazio
+    formData.append("file", file);
 
-    const uploadInterval = setInterval(() => {
-      uploadedChunks++;
-      const progress = Math.min((uploadedChunks / totalChunks) * 100, 100);
-      setUploadProgress(progress);
+    try {
+      const response = await fetch(`${API_BASE_URL}/upload`, {
+        method: "POST",
+        body: formData,
+        mode:'no-cors'
+      });
 
-      if (uploadedChunks === totalChunks) {
-        clearInterval(uploadInterval);
-        alert('Arquivo PDF carregado com sucesso!');
+      if (!response.ok) {
+        throw new Error(`Erro ao enviar arquivo: ${response.statusText}`);
       }
-    }, 500); // Simula upload a cada 500ms
+
+      const data = await response.json();
+
+      const newNotebook = {
+        title: file.name,
+        date: new Date().toLocaleDateString("pt-BR"),
+        content: null,
+        file: file,
+      };
+
+      setNotebooks([...notebooks, newNotebook]);
+      setActiveNotebook(newNotebook);
+      setActivePage("chat");
+      setUploadDialogOpen(false);
+    } catch (error) {
+      console.error("Erro no upload:", error);
+      alert("Erro ao enviar o arquivo");
+    }
+  };
+
+  const handleNotebookClick = (notebook) => {
+    setActiveNotebook(notebook);
+    setActivePage("chat");
+  };
+
+  const handleTitleClick = () => {
+    setEditingTitle(true);
+  };
+
+  const handleTitleChange = (event) => {
+    if (event.key === "Enter" || event.type === "blur") {
+      setEditingTitle(false);
+      setActiveNotebook({ ...activeNotebook, title: event.target.value });
+      setNotebooks(
+        notebooks.map((nb) =>
+          nb === activeNotebook ? { ...nb, title: event.target.value } : nb
+        )
+      );
+    }
   };
 
   return (
-    <div className="container">
-      {/* Header Section */}
-      <header className="header">
-        <img src={logo} alt="Logo Copel" className="logo" />
-      </header>
+    <Box sx={{ bgcolor: "#121212", color: "#fff", minHeight: "100vh" }}>
+      <AppBar position="static" sx={{ bgcolor: "#1f1f1f" }}>
+        <Toolbar>
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+            NotebookLM
+          </Typography>
+          <Button color="inherit" onClick={() => setActivePage("home")}>
+            Home
+          </Button>
+        </Toolbar>
+      </AppBar>
 
-      {/* Upload Section */}
-      <div className="upload-section">
-        <h2>Upload de Documento (somente PDF)</h2>
-        <div className="upload-wrapper">
-          <label htmlFor="file-upload" className="upload-label">
-            <span className="upload-icon">📁</span>
-            Escolha um arquivo PDF para carregar
-          </label>
-          <input
-            type="file"
-            id="file-upload"
-            className="file-input"
-            onChange={handleFileChange}
-          />
-        </div>
-        {file && <p>{file.name} - {Math.round(file.size / (1024 * 1024))} MB</p>}
-        <button className="upload-button" onClick={handleFileUpload}>
-          Carregar
-        </button>
-        {uploadProgress > 0 && (
-          <div className="progress-bar">
-            <div
-              className="progress-bar-fill"
-              style={{ width: `${uploadProgress}%` }}
-            />
-          </div>
-        )}
-      </div>
+      {activePage === "home" && (
+        <Box sx={{ p: 3 }}>
+          <Typography variant="h4" sx={{ mb: 3 }}>
+            Meus notebooks
+          </Typography>
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<UploadFileIcon />}
+            onClick={() => setUploadDialogOpen(true)}
+            sx={{ mb: 3 }}
+          >
+            + Criar novo
+          </Button>
 
-      {/* Chat Section */}
-      <div className="chat-section">
-        <h2>Chat</h2>
-        <div className="chat-window">
-          {messages.map((msg, index) => (
-            <div key={index} className={`message ${msg.sender}`}>
-              {msg.text}
-            </div>
-          ))}
-        </div>
-        <div className="chat-input">
-          <input
-            type="text"
-            value={userMessage}
-            onChange={(e) => setUserMessage(e.target.value)}
-            placeholder="Digite sua mensagem..."
-          />
-          <button onClick={handleSendMessage} className="send-button">
-            Enviar
-          </button>
-        </div>
-      </div>
-    </div>
+          <Grid container spacing={2}>
+            {notebooks.map((notebook, index) => (
+              <Grid item xs={12} sm={6} md={4} key={index}>
+                <Card
+                  sx={{ bgcolor: "#FF0000", color: "#fff", cursor: "pointer" }}
+                  onClick={() => handleNotebookClick(notebook)}
+                >
+                  <CardContent>
+                    <Typography variant="h6">{notebook.title}</Typography>
+                    <Typography variant="body2">{notebook.date}</Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        </Box>
+      )}
+
+      {activePage === "chat" && activeNotebook && (
+        <Box sx={{ p: 3 }}>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              borderBottom: "1px solid #444",
+              pb: 1,
+              mb: 2,
+            }}
+          >
+            {editingTitle ? (
+              <input
+                type="text"
+                defaultValue={activeNotebook.title}
+                onKeyDown={handleTitleChange}
+                onBlur={handleTitleChange}
+                autoFocus
+                style={{
+                  fontSize: "1.5rem",
+                  background: "transparent",
+                  color: "#fff",
+                  border: "none",
+                  outline: "none",
+                  width: "100%",
+                }}
+              />
+            ) : (
+              <Typography
+                variant="h5"
+                onClick={handleTitleClick}
+                sx={{ cursor: "pointer" }}
+              >
+                {activeNotebook.title}
+              </Typography>
+            )}
+          </Box>
+          
+          {/* Exibir o Chat passando o notebook ativo */}
+          <Chat notebook={activeNotebook} />
+        </Box>
+      )}
+
+      <Dialog open={uploadDialogOpen} onClose={() => setUploadDialogOpen(false)}>
+        <DialogTitle>Adicionar fontes</DialogTitle>
+        <DialogContent>
+          <Box
+            sx={{
+              border: "1px dashed #ccc",
+              p: 3,
+              textAlign: "center",
+              bgcolor: "#2c2c2c",
+            }}
+          >
+            <Typography variant="body1" sx={{ mb: 2 }}>
+              Arraste e solte ou selecione o arquivo para upload
+            </Typography>
+            <Button variant="contained" component="label">
+              Selecionar arquivo
+              <input type="file" hidden onChange={handleFileUpload} />
+            </Button>
+          </Box>
+        </DialogContent>
+      </Dialog>
+    </Box>
   );
-};
+}
 
 export default App;
